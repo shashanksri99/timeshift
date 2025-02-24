@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Backup Type: D = Daily, W = Weekly, M = Monthly
-BACKUP_TYPE=$1
+# Backup Type: D = Daily
+BACKUP_TYPE="D"
 BACKUP_DIR="/media"
 EMAIL="gaanaiphone@gmail.com"
 DISK_USAGE_THRESHOLD=80
@@ -24,9 +24,13 @@ timeshift --create --comments "$BACKUP_TYPE Backup" --tags $BACKUP_TYPE >> $LOGF
 CURRENT_USAGE=$(df -h "$BACKUP_DIR" | awk 'NR==2 {print $5}' | sed 's/%//')
 
 if [ "$CURRENT_USAGE" -ge "$DISK_USAGE_THRESHOLD" ]; then
-    echo "⚠️ Disk usage exceeded $DISK_USAGE_THRESHOLD%. Purging old backups..." >> $LOGFILE
-    timeshift --delete --all --scripted >> $LOGFILE 2>&1
+    echo "⚠️ Disk usage exceeded $DISK_USAGE_THRESHOLD%. Purging old backups, keeping the latest 5..." >> $LOGFILE
+    timeshift --list | grep 'Snapshot' | awk 'NR>6 {print $4}' | xargs -I {} timeshift --delete --snapshot-id {} >> $LOGFILE 2>&1
 fi
+
+# Delete backups older than 30 days
+echo "🗑️ Deleting backups older than 30 days..." >> $LOGFILE
+timeshift --check --scripted | grep 'No snapshots found' || timeshift --delete --snapshot 'D' --date '+30 days ago' >> $LOGFILE 2>&1
 
 # Send Email Notification using Docker
 SUBJECT="Timeshift $BACKUP_TYPE Backup Report - $(hostname)"
